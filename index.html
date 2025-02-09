@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magical Todo App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #1a1c2e 0%, #2a2d43 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+        .task {
+            transition: all 0.3s ease;
+        }
+        .task:hover {
+            transform: translateY(-2px);
+        }
+        .reward-animation {
+            animation: pop 0.5s ease;
+        }
+        @keyframes pop {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .mood-happy { background: linear-gradient(135deg, #FF6B6B 0%, #FFA06B 100%); }
+        .mood-calm { background: linear-gradient(135deg, #4ECDC4 0%, #55B5AB 100%); }
+        .mood-focused { background: linear-gradient(135deg, #6C5CE7 0%, #8B7FE8 100%); }
+        .progress-ring {
+            transition: stroke-dashoffset 0.35s;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mx-auto px-4 py-8">
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">Magical Todo</h1>
+                <p class="text-gray-400">Level up your productivity!</p>
+            </div>
+            <div class="flex gap-4">
+                <button id="moodBtn" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg flex items-center gap-2">
+                    <i class="bi bi-emoji-smile"></i> Mood
+                </button>
+                <button id="timelineBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2">
+                    <i class="bi bi-clock-history"></i> Timeline
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Task Input -->
+            <div class="col-span-1 md:col-span-2 lg:col-span-3 bg-gray-800 p-6 rounded-xl shadow-lg">
+                <div class="flex gap-4">
+                    <input type="text" id="taskInput" placeholder="Add a new quest..." 
+                           class="flex-1 bg-gray-700 text-white px-4 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <button id="addTask" class="bg-purple-600 hover:bg-purple-700 px-6 py-3 rounded-lg flex items-center gap-2">
+                        <i class="bi bi-plus-lg"></i> Add
+                    </button>
+                </div>
+                <div id="aiSuggestion" class="mt-4 text-sm text-gray-400"></div>
+            </div>
+
+            <!-- Task Lists -->
+            <div id="taskContainer" class="col-span-1 md:col-span-2 lg:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Tasks will be added here dynamically -->
+            </div>
+        </div>
+
+        <!-- Achievement Modal -->
+        <div id="achievementModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center">
+            <div class="bg-gray-800 p-8 rounded-xl text-center reward-animation">
+                <i class="bi bi-trophy text-6xl text-yellow-400 mb-4"></i>
+                <h3 class="text-2xl font-bold mb-2">Achievement Unlocked!</h3>
+                <p id="achievementText" class="text-gray-400 mb-4">You're on fire! 🔥</p>
+                <button onclick="closeAchievement()" class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg">
+                    Continue
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const DATABASE_KEY = 'magical-todo-12345';
+        let tasks = [];
+        let currentMood = 'focused';
+        let level = 1;
+        let xp = 0;
+
+        // Initialize app
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTasks();
+            updateAISuggestion();
+            setInterval(updateAISuggestion, 30000); // Update AI suggestion every 30s
+        });
+
+        // Task Management
+        document.getElementById('addTask').addEventListener('click', () => {
+            const input = document.getElementById('taskInput');
+            if (input.value.trim()) {
+                addTask(input.value);
+                input.value = '';
+            }
+        });
+
+        document.getElementById('taskInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('addTask').click();
+            }
+        });
+
+        document.getElementById('moodBtn').addEventListener('click', cycleMood);
+
+        function addTask(title) {
+            const task = {
+                id: Date.now(),
+                title,
+                completed: false,
+                createdAt: new Date().toISOString(),
+                difficulty: calculateDifficulty(title)
+            };
+
+            tasks.unshift(task);
+            saveTasks();
+            renderTasks();
+            updateAISuggestion();
+        }
+
+        function toggleTask(id) {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                task.completed = !task.completed;
+                if (task.completed) {
+                    gainXP(task.difficulty);
+                    checkAchievements();
+                }
+                saveTasks();
+                renderTasks();
+            }
+        }
+
+        function deleteTask(id) {
+            tasks = tasks.filter(t => t.id !== id);
+            saveTasks();
+            renderTasks();
+        }
+
+        function renderTasks() {
+            const container = document.getElementById('taskContainer');
+            container.innerHTML = '';
+
+            tasks.forEach(task => {
+                const taskEl = document.createElement('div');
+                taskEl.className = `task ${task.completed ? 'opacity-50' : ''} bg-gray-800 p-6 rounded-xl shadow-lg`;
+                taskEl.innerHTML = `
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="font-semibold ${task.completed ? 'line-through' : ''}">${task.title}</h3>
+                        <div class="flex gap-2">
+                            <button onclick="toggleTask(${task.id})" class="text-xl">
+                                ${task.completed ? '<i class="bi bi-check-circle-fill text-green-500"></i>' : '<i class="bi bi-circle text-gray-400"></i>'}
+                            </button>
+                            <button onclick="deleteTask(${task.id})" class="text-xl text-red-500">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center text-sm text-gray-400">
+                        <span>Difficulty: ${'⭐'.repeat(task.difficulty)}</span>
+                        <span>${formatDate(task.createdAt)}</span>
+                    </div>
+                `;
+                container.appendChild(taskEl);
+            });
+
+            updateProgress();
+        }
+
+        // Helper Functions
+        function calculateDifficulty(title) {
+            const words = title.split(' ').length;
+            return Math.min(Math.max(Math.ceil(words/2), 1), 5);
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+
+        function gainXP(amount) {
+            xp += amount * 10;
+            if (xp >= level * 100) {
+                levelUp();
+            }
+            updateProgress();
+        }
+
+        function levelUp() {
+            level++;
+            xp = 0;
+            showAchievement(`Level ${level} Reached! 🎉`);
+        }
+
+        function updateProgress() {
+            const progress = (xp / (level * 100)) * 100;
+            document.querySelector(':root').style.setProperty('--progress', `${progress}%`);
+        }
+
+        function cycleMood() {
+            const moods = ['happy', 'calm', 'focused'];
+            const currentIndex = moods.indexOf(currentMood);
+            currentMood = moods[(currentIndex + 1) % moods.length];
+            document.body.className = `mood-${currentMood}`;
+        }
+
+        // Storage Functions
+        function saveTasks() {
+            localStorage.setItem(DATABASE_KEY, JSON.stringify({
+                tasks,
+                level,
+                xp
+            }));
+        }
+
+        function loadTasks() {
+            const data = JSON.parse(localStorage.getItem(DATABASE_KEY) || '{"tasks":[],"level":1,"xp":0}');
+            tasks = data.tasks;
+            level = data.level;
+            xp = data.xp;
+            renderTasks();
+        }
+
+        // AI Features
+        function updateAISuggestion() {
+            const suggestions = [
+                "Try breaking down large tasks into smaller ones",
+                "Consider tackling the hardest task first",
+                "Take a short break every 25 minutes",
+                "Stay hydrated for better productivity!",
+                "Group similar tasks together for efficiency"
+            ];
+            
+            document.getElementById('aiSuggestion').innerHTML = `
+                <i class="bi bi-lightning-charge-fill text-yellow-400"></i>
+                AI Suggestion: ${suggestions[Math.floor(Math.random() * suggestions.length)]}
+            `;
+        }
+
+        // Achievement System
+        function checkAchievements() {
+            const completedTasks = tasks.filter(t => t.completed).length;
+            if (completedTasks % 5 === 0) {
+                showAchievement(`Completed ${completedTasks} tasks! 🌟`);
+            }
+        }
+
+        function showAchievement(text) {
+            const modal = document.getElementById('achievementModal');
+            document.getElementById('achievementText').textContent = text;
+            modal.style.display = 'flex';
+        }
+
+        function closeAchievement() {
+            document.getElementById('achievementModal').style.display = 'none';
+        }
+
+        // Initialize mood
+        document.body.className = `mood-${currentMood}`;
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
